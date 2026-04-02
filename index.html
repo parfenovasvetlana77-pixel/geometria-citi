@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🏰 ГеоСити | Цветные домики</title>
+<style>
+    body { margin:0; overflow:hidden; font-family:'Segoe UI', 'Comic Neue', sans-serif; }
+    #ui {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(30, 35, 45, 0.94);
+        backdrop-filter: blur(12px);
+        padding: 18px 24px;
+        border-radius: 32px;
+        width: 340px;
+        color: white;
+        border-left: 6px solid #ffaa66;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+        pointer-events: auto;
+        font-family: 'Segoe UI', monospace;
+        z-index: 20;
+        transition: all 0.3s ease;
+    }
+    #ui h3 {
+        margin: 0 0 6px 0;
+        font-size: 1.5rem;
+        letter-spacing: 1px;
+        color: #ffcc88;
+    }
+    #taskText {
+        font-weight: bold;
+        background: rgba(0,0,0,0.6);
+        padding: 12px 14px;
+        border-radius: 28px;
+        margin: 12px 0;
+        font-size: 0.95rem;
+        backdrop-filter: blur(4px);
+        line-height: 1.4;
+        font-family: monospace;
+        white-space: pre-wrap;
+    }
+    input {
+        padding: 10px 14px;
+        border-radius: 50px;
+        border: none;
+        width: 130px;
+        font-size: 1rem;
+        text-align: center;
+        font-weight: bold;
+        margin-right: 12px;
+        background: #fef7e0;
+        font-family: monospace;
+    }
+    button {
+        background: #ffaa55;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 50px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.2s;
+        font-family: monospace;
+        font-size: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    button:hover {
+        background: #ffcc77;
+        transform: scale(1.02);
+    }
+    #status {
+        margin: 12px 0 5px;
+        font-weight: bold;
+        min-height: 32px;
+        font-size: 0.9rem;
+    }
+    .stats {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        background: rgba(0,0,0,0.45);
+        padding: 10px 15px;
+        border-radius: 32px;
+        font-size: 0.9rem;
+        font-weight: bold;
+    }
+    #miniMap {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0,0,0,0.7);
+        backdrop-filter: blur(5px);
+        color: #ffddbb;
+        padding: 12px 20px;
+        border-radius: 28px;
+        font-family: monospace;
+        font-size: 13px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 20;
+        border: 1px solid #ffaa66;
+        pointer-events: none;
+    }
+    .controls-tip {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background: rgba(0,0,0,0.6);
+        padding: 8px 18px;
+        border-radius: 40px;
+        color: #ddd;
+        font-size: 12px;
+        font-family: monospace;
+        backdrop-filter: blur(5px);
+        pointer-events: none;
+        z-index: 20;
+    }
+    @keyframes celebrationPulse {
+        0% { transform: scale(1); text-shadow: 0 0 0 gold; }
+        100% { transform: scale(1.05); text-shadow: 0 0 20px gold; }
+    }
+    .celebration {
+        animation: celebrationPulse 0.5s ease-in-out infinite alternate;
+    }
+    @media (max-width: 600px) {
+        #ui { width: 280px; padding: 12px 16px; top: 12px; left: 12px; }
+        .controls-tip { font-size: 9px; bottom: 12px; left: 12px; }
+    }
+</style>
+</head>
+<body>
+<div id="ui">
+    <h3>🏰 ГЕОМЕТРИЯ-СИТИ</h3>
+    <div id="taskText">✨ Нажми на фигуру со стрелкой, чтобы решить задачу!</div>
+    <input id="answer" type="number" step="any" placeholder="Введите ответ">
+    <button onclick="checkAnswer()">🏠 ПОСТРОИТЬ ДОМ</button>
+    <div id="status"></div>
+    <div class="stats">
+        <span>🏆 Очки: <span id="score">0</span></span>
+        <span>🏘️ Решено: <span id="progress">0</span>/<span id="total">7</span></span>
+    </div>
+</div>
+<div id="miniMap">
+    🧭 7 ЗАДАЧ | В ЦЕНТРЕ — СТАТУЯ<br>
+    🎨 Красный, оранжевый, желтый, зеленый, голубой, синий, фиолетовый
+</div>
+<div class="controls-tip">
+    🎮 WASD / стрелки — ходьба | 🖱️ Зажми ПКМ + тяни — обзор | 🔍 Колёсико — приблизить
+</div>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+
+    // --- СЦЕНА ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xaad4f5);
+    scene.fog = new THREE.FogExp2(0xaad4f5, 0.008);
+    
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(18, 10, 22);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+    
+    // Управление
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 1.0;
+    controls.zoomSpeed = 1.2;
+    controls.panSpeed = 0.8;
+    controls.screenSpacePanning = true;
+    controls.maxPolarAngle = Math.PI / 2.2;
+    controls.target.set(0, 2, 0);
+    
+    // Клавиши для свободного перемещения
+    const keyState = { w: false, s: false, a: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+    let moveSpeed = 8;
+    
+    window.addEventListener('keydown', (e) => {
+        const k = e.key;
+        if (keyState.hasOwnProperty(k)) keyState[k] = true;
+        if (['w','s','a','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => {
+        const k = e.key;
+        if (keyState.hasOwnProperty(k)) keyState[k] = false;
+    });
+    
+    function updateMovement(deltaTime) {
+        const speed = moveSpeed * deltaTime;
+        const forward = new THREE.Vector3();
+        const right = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        right.crossVectors(new THREE.Vector3(0, 1, 0), forward);
+        right.normalize();
+        let move = new THREE.Vector3(0, 0, 0);
+        if (keyState['w'] || keyState['ArrowUp']) move.add(forward);
+        if (keyState['s'] || keyState['ArrowDown']) move.sub(forward);
+        if (keyState['d'] || keyState['ArrowRight']) move.add(right);
+        if (keyState['a'] || keyState['ArrowLeft']) move.sub(right);
+        if (move.length() > 0) {
+            move.normalize();
+            move.multiplyScalar(speed);
+            camera.position.add(move);
+            controls.target.add(move);
+        }
+    }
+    
+    // Освещение
+    const sunLight = new THREE.DirectionalLight(0xfff5c8, 1.3);
+    sunLight.position.set(15, 20, 8);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 40;
+    sunLight.shadow.camera.left = -12;
+    sunLight.shadow.camera.right = 12;
+    sunLight.shadow.camera.top = 12;
+    sunLight.shadow.camera.bottom = -12;
+    scene.add(sunLight);
+    
+    const ambient = new THREE.AmbientLight(0x5c6e7a, 0.65);
+    scene.add(ambient);
+    const fillLight = new THREE.PointLight(0x88aacc, 0.55);
+    fillLight.position.set(-3, 8, -5);
+    scene.add(fillLight);
+    
+    // Зелёная поляна
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x6aab4a, roughness: 0.85, metalness: 0.05 });
+    const groundPlane = new THREE.Mesh(new THREE.CircleGeometry(28, 32), groundMat);
+    groundPlane.rotation.x = -Math.PI / 2;
+    groundPlane.position.y = -0.2;
+    groundPlane.receiveShadow = true;
+    scene.add(groundPlane);
+    
+    // Кустики
+    function addBush(x, z, size = 0.4) {
+        const bushMat = new THREE.MeshStandardMaterial({ color: 0x5c8c3a, roughness: 0.7 });
+        const bushGroup = new THREE.Group();
+        const mainBush = new THREE.Mesh(new THREE.SphereGeometry(size, 7), bushMat);
+        mainBush.position.y = size * 0.6;
+        bushGroup.add(mainBush);
+        const sideBush = new THREE.Mesh(new THREE.SphereGeometry(size * 0.7, 6), bushMat);
+        sideBush.position.set(size * 0.5, size * 0.3, size * 0.4);
+        bushGroup.add(sideBush);
+        const sideBush2 = new THREE.Mesh(new THREE.SphereGeometry(size * 0.6, 6), bushMat);
+        sideBush2.position.set(-size * 0.4, size * 0.2, -size * 0.5);
+        bushGroup.add(sideBush2);
+        bushGroup.position.set(x, -0.15, z);
+        bushGroup.castShadow = true;
+        bushGroup.receiveShadow = false;
+        scene.add(bushGroup);
+    }
+    
+    for (let i = 0; i < 400; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const rad = 5 + Math.random() * 22;
+        const x = Math.cos(angle) * rad;
+        const z = Math.sin(angle) * rad;
+        if (Math.hypot(x, z) > 1.8 && Math.random() > 0.45) {
+            addBush(x, z, 0.25 + Math.random() * 0.25);
+        }
+    }
+    
+    // Цветочная поляна
+    const flowerColors = [0xffb7c5, 0xffdd87, 0xdd88ff, 0xffaa77, 0xf4a261];
+    function createFlower(x, z) {
+        const group = new THREE.Group();
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.3, 3), new THREE.MeshStandardMaterial({ color: 0x6b8c42 }));
+        stem.position.y = 0.15;
+        group.add(stem);
+        const headMat = new THREE.MeshStandardMaterial({ color: flowerColors[Math.floor(Math.random() * flowerColors.length)] });
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8), headMat);
+        head.position.y = 0.3;
+        group.add(head);
+        for (let i = 0; i < 5; i++) {
+            const petal = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 6), headMat);
+            const ang = (i / 5) * Math.PI * 2;
+            petal.position.set(Math.cos(ang) * 0.18, 0.28, Math.sin(ang) * 0.18);
+            group.add(petal);
+        }
+        group.position.set(x, -0.1, z);
+        scene.add(group);
+    }
+    for (let i = 0; i < 600; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const rad = Math.random() * 23;
+        const x = Math.cos(angle) * rad;
+        const z = Math.sin(angle) * rad;
+        if (Math.hypot(x, z) > 2.5 && Math.random() > 0.35) createFlower(x, z);
+    }
+    
+    // Деревья по периметру
+    function makeTree(x, z) {
+        const group = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.8), new THREE.MeshStandardMaterial({ color: 0x9c6e3e, roughness: 0.8 }));
+        trunk.position.y = 0.9;
+        trunk.castShadow = true;
+        group.add(trunk);
+        for (let i = 0; i < 3; i++) {
+            const fol = new THREE.Mesh(new THREE.ConeGeometry(0.85 - i * 0.12, 1.0, 8), new THREE.MeshStandardMaterial({ color: 0x6c9e3c, roughness: 0.5 }));
+            fol.position.y = 1.5 + i * 0.8;
+            fol.castShadow = true;
+            group.add(fol);
+        }
+        group.position.set(x, 0, z);
+        scene.add(group);
+    }
+    for (let i = 0; i < 45; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const rad = 19 + Math.random() * 5;
+        const x = Math.cos(angle) * rad;
+        const z = Math.sin(angle) * rad;
+        makeTree(x, z);
+    }
+    
+    // ========== ЦЕНТРАЛЬНАЯ СТАТУЯ ==========
+    const statueGroup = new THREE.Group();
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0xcdb38c, roughness: 0.3, metalness: 0.4 }));
+    pedestal.position.y = 0.4;
+    pedestal.castShadow = true;
+    statueGroup.add(pedestal);
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 1.4, 12), new THREE.MeshStandardMaterial({ color: 0xddbb88, roughness: 0.2, metalness: 0.5 }));
+    column.position.y = 1.1;
+    column.castShadow = true;
+    statueGroup.add(column);
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, metalness: 0.85, roughness: 0.25, emissive: 0x442200, emissiveIntensity: 0.15 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.65, 32, 32), goldMat);
+    core.position.y = 1.95;
+    core.castShadow = true;
+    statueGroup.add(core);
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.9, 8), goldMat);
+        spike.position.set(Math.cos(angle) * 0.95, 1.95, Math.sin(angle) * 0.95);
+        spike.castShadow = true;
+        statueGroup.add(spike);
+    }
+    const topSpike = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.0, 8), goldMat);
+    topSpike.position.y = 2.55;
+    topSpike.castShadow = true;
+    statueGroup.add(topSpike);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xffaa66, emissive: 0xff6622, emissiveIntensity: 0.4 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.08, 32, 64), ringMat);
+    ring.position.y = 1.95;
+    ring.rotation.x = Math.PI / 2;
+    statueGroup.add(ring);
+    statueGroup.position.set(0, 0, 0);
+    scene.add(statueGroup);
+    
+    // Парящие искорки
+    const sparkles = [];
+    for (let i = 0; i < 30; i++) {
+        const spark = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), new THREE.MeshStandardMaterial({ color: 0xffaa66, emissive: 0xff8844 }));
+        spark.userData = { angle: Math.random() * Math.PI * 2, radius: 1.2 + Math.random() * 0.8, speed: 0.5 + Math.random() * 0.8, yOffset: 1.2 + Math.random() * 1.6 };
+        spark.position.set(0, spark.userData.yOffset, 0);
+        statueGroup.add(spark);
+        sparkles.push(spark);
+    }
+    
+    // ========== ЗАДАНИЯ с фиксированными цветами домиков ==========
+    const houseColorsList = [
+        0xff3333, // 1 - красный
+        0xff8844, // 2 - оранжевый
+        0xffdd44, // 3 - желтый
+        0x44cc44, // 4 - зеленый
+        0x44aaff, // 5 - голубой
+        0x3366ff, // 6 - синий
+        0xaa44ff  // 7 - фиолетовый
+    ];
+    
+    const roofColorsList = [
+        0xcc6644, 0xcc7744, 0xcc8844, 0xaa8844, 0xaa8866, 0x886644, 0x9966aa
+    ];
+    
+    const tasks = [
+        { text: "📐 Задача 1. Катеты 18 и 24. Найдите гипотенузу.", answer: 30, angle: 0, radius: 12, displayAnswer: "30", houseIndex: 0 },
+        { text: "📏 Задача 2. Катет 16, гипотенуза 20. Найдите другой катет.", answer: 12, angle: 51.4, radius: 12.5, displayAnswer: "12", houseIndex: 1 },
+        { text: "🪜 Задача 3. Лестница 17 м, от стены 8 м. Высота окна?", answer: 15, angle: 102.8, radius: 12, displayAnswer: "15", houseIndex: 2 },
+        { text: "⬛ Задача 4. Сторона квадрата = 7√2. Найдите диагональ.", answer: 14, angle: 154.2, radius: 13, displayAnswer: "14", houseIndex: 3 },
+        { text: "🔺 Задача 5. Биссектриса равностороннего Δ = 13√3. Найдите сторону.", answer: 26, angle: 205.6, radius: 12.2, displayAnswer: "26", houseIndex: 4 },
+        { text: "🔺 Задача 6. Сторона равностороннего Δ = 12√3. Найдите высоту.", answer: 18, angle: 257, radius: 12.8, displayAnswer: "18", houseIndex: 5 },
+        { text: "📐 Задача 7. Трапеция: ∠ABC=60°, ∠BCD=135°, CD=3. Найдите AB.", answer: 3, angle: 308.4, radius: 12.5, displayAnswer: "3", houseIndex: 6 }
+    ];
+    
+    let objectsList = [];
+    let solvedCount = 0;
+    let currentScore = 0;
+    let currentFigure = null;
+    let finalEffectTriggered = false;
+    const totalTasks = tasks.length;
+    
+    function updateUI() {
+        document.getElementById('score').innerText = currentScore;
+        document.getElementById('progress').innerText = solvedCount;
+        document.getElementById('total').innerText = totalTasks;
+        if (solvedCount === totalTasks && !finalEffectTriggered) {
+            document.getElementById('taskText').innerHTML = "🏆✨ ВСЕ ЗАДАЧИ РЕШЕНЫ! СТАТУЯ ОЖИВАЕТ! ✨🏆";
+            triggerFinalStatueEffect();
+        }
+    }
+    
+    // ===== НОВАЯ АНИМАЦИЯ СТАТУИ (ТОЛЬКО ШАРИКИ, БЕЗ КОЛЕЦ) =====
+    function triggerFinalStatueEffect() {
+        if (finalEffectTriggered) return;
+        finalEffectTriggered = true;
+        const uiElement = document.getElementById('ui');
+        uiElement.classList.add('celebration');
+        setTimeout(() => uiElement.classList.remove('celebration'), 3000);
+        
+        // Подсветка статуи с пульсацией
+        const statueLight = new THREE.PointLight(0xffaa66, 2, 25);
+        statueLight.position.set(0, 2, 0);
+        scene.add(statueLight);
+        
+        let time = 0;
+        const lightPulse = setInterval(() => {
+            time += 0.1;
+            statueLight.intensity = 1.5 + Math.sin(time * 12) * 1.2;
+        }, 30);
+        
+        // Светящиеся шарики, разлетающиеся от статуи
+        for (let i = 0; i < 120; i++) {
+            setTimeout(() => {
+                const particle = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.12, 8, 8),
+                    new THREE.MeshStandardMaterial({ color: 0xffaa66, emissive: 0xff6622, emissiveIntensity: 0.6 })
+                );
+                // Случайное направление от статуи
+                const dir = new THREE.Vector3(
+                    (Math.random() - 0.5) * 2,
+                    Math.random() * 1.5 + 0.3,
+                    (Math.random() - 0.5) * 2
+                ).normalize();
+                particle.position.set(0, 1.8, 0);
+                particle.userData = {
+                    vel: dir.multiplyScalar(1.8 + Math.random() * 2.5),
+                    life: 1,
+                    gravity: 0.07
+                };
+                scene.add(particle);
+                
+                function animateParticle() {
+                    if (particle.userData.life <= 0) {
+                        scene.remove(particle);
+                        return;
+                    }
+                    particle.userData.life -= 0.018;
+                    particle.userData.vel.y -= particle.userData.gravity;
+                    particle.position.x += particle.userData.vel.x * 0.1;
+                    particle.position.y += particle.userData.vel.y * 0.1;
+                    particle.position.z += particle.userData.vel.z * 0.1;
+                    particle.material.opacity = particle.userData.life;
+                    particle.material.emissiveIntensity = particle.userData.life * 1.2;
+                    requestAnimationFrame(animateParticle);
+                }
+                animateParticle();
+            }, i * 20);
+        }
+        
+        // Финальная вспышка света
+        setTimeout(() => {
+            const flashMat = new THREE.MeshBasicMaterial({ color: 0xffaa66, transparent: true, opacity: 0.8 });
+            const flashPlane = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), flashMat);
+            flashPlane.position.set(0, 2, 0);
+            scene.add(flashPlane);
+            
+            let flashTime = 0;
+            function animateFlash() {
+                flashTime += 0.05;
+                if (flashTime < 1) {
+                    flashMat.opacity = 0.8 * (1 - flashTime);
+                    requestAnimationFrame(animateFlash);
+                } else {
+                    scene.remove(flashPlane);
+                }
+            }
+            requestAnimationFrame(animateFlash);
+        }, 300);
+        
+        setTimeout(() => {
+            clearInterval(lightPulse);
+            scene.remove(statueLight);
+        }, 3500);
+    }
+    
+    // Стрелка с номером
+    function addArrowAbove(obj, taskNumber) {
+        const arrowGroup = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 1.3, 5), new THREE.MeshStandardMaterial({ color: 0xff5566, emissive: 0x441122 }));
+        pole.position.y = 0.65;
+        arrowGroup.add(pole);
+        const arrowHead = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0xff6644, emissive: 0x552200 }));
+        arrowHead.position.y = 1.25;
+        arrowGroup.add(arrowHead);
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffcc88';
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.font = 'Bold 78px "Segoe UI"';
+        ctx.fillStyle = '#b33e00';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(taskNumber.toString(), 64, 68);
+        const texture = new THREE.CanvasTexture(canvas);
+        const numMat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide });
+        const numberPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), numMat);
+        numberPlane.position.y = 0.98;
+        numberPlane.rotation.x = Math.PI / 2;
+        arrowGroup.add(numberPlane);
+        arrowGroup.position.copy(obj.position);
+        arrowGroup.position.y += 1.75;
+        scene.add(arrowGroup);
+        return arrowGroup;
+    }
+    
+    // ВЫСОКАЯ ТРЕУГОЛЬНАЯ КРЫША
+    function createHighRoof(posY, width, color) {
+        const roofGroup = new THREE.Group();
+        const roofGeo = new THREE.ConeGeometry(width * 0.85, 1.5, 8);
+        const roofMesh = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: color, roughness: 0.35, metalness: 0.05 }));
+        roofMesh.position.y = posY;
+        roofMesh.castShadow = true;
+        roofGroup.add(roofMesh);
+        return roofGroup;
+    }
+    
+    // Табличка с ответом
+    function createAnswerSign(answerText, pos) {
+        const group = new THREE.Group();
+        const plankMat = new THREE.MeshStandardMaterial({ color: 0xcd9a6b, roughness: 0.5 });
+        const board = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.08), plankMat);
+        board.position.y = 0.3;
+        board.castShadow = true;
+        group.add(board);
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fef0d8';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = 'Bold 100px "Segoe UI", monospace';
+        ctx.fillStyle = '#5a3e2b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(answerText, canvas.width / 2, canvas.height / 2);
+        ctx.font = '28px monospace';
+        ctx.fillStyle = '#8b6946';
+        ctx.fillText("✓ ответ", canvas.width / 2, canvas.height - 40);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const signMat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide });
+        const signPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.5), signMat);
+        signPlane.position.y = 0.3;
+        signPlane.position.z = 0.07;
+        group.add(signPlane);
+        
+        const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.5, 4), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
+        stake.position.y = -0.2;
+        group.add(stake);
+        
+        group.position.copy(pos);
+        group.position.y += 1.25;
+        const toCenter = new THREE.Vector3(-pos.x, 0, -pos.z).normalize();
+        const angle = Math.atan2(toCenter.x, toCenter.z);
+        group.rotation.y = angle;
+        scene.add(group);
+        return group;
+    }
+    
+    // 🏠 ДОМИК с заданным цветом и высокой крышей
+    function buildHouseWithColor(pos, answerText, wallColor, roofColor, houseNumber) {
+        const group = new THREE.Group();
+        const w = 2.0 + Math.random() * 0.5;
+        const h = 2.2 + Math.random() * 0.4;
+        const d = 2.0 + Math.random() * 0.5;
+        
+        const bodyMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.35 });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
+        body.position.y = h / 2;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        group.add(body);
+        
+        const roof = createHighRoof(h + 0.35, w, roofColor);
+        group.add(roof);
+        
+        const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.55), new THREE.MeshStandardMaterial({ color: 0xb56a3c }));
+        chimney.position.set(0.8, h - 0.15, 0.7);
+        chimney.castShadow = true;
+        group.add(chimney);
+        
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0xde9a6a });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.05, 0.08), doorMat);
+        door.position.set(0, 0.5, d / 2 + 0.06);
+        door.castShadow = true;
+        group.add(door);
+        
+        const windowMat = new THREE.MeshStandardMaterial({ color: 0xffdd99 });
+        const win1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.07), windowMat);
+        win1.position.set(-0.7, 1.2, d / 2 + 0.05);
+        group.add(win1);
+        const win2 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.07), windowMat);
+        win2.position.set(0.7, 1.2, d / 2 + 0.05);
+        group.add(win2);
+        
+        group.position.copy(pos);
+        group.position.y = 0;
+        
+        const directionToCenter = new THREE.Vector3(-pos.x, 0, -pos.z).normalize();
+        const angleToCenter = Math.atan2(directionToCenter.x, directionToCenter.z);
+        group.rotation.y = angleToCenter;
+        
+        group.scale.set(0, 0, 0);
+        scene.add(group);
+        
+        const startTime = performance.now();
+        const duration = 600;
+        
+        function animateHouseScale(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(1, elapsed / duration);
+            const s = Math.sin(progress * Math.PI / 2);
+            group.scale.set(s, s, s);
+            if (progress < 1) {
+                requestAnimationFrame(animateHouseScale);
+            } else {
+                createAnswerSign(answerText, pos);
+                for (let i = 0; i < 4 + Math.floor(Math.random() * 3); i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const rad = 1.3 + Math.random() * 1.0;
+                    const bx = pos.x + Math.cos(angle) * rad;
+                    const bz = pos.z + Math.sin(angle) * rad;
+                    addBush(bx, bz, 0.22 + Math.random() * 0.2);
+                }
+            }
+        }
+        requestAnimationFrame(animateHouseScale);
+        
+        return group;
+    }
+    
+    // Создаём фигуры-задания
+    tasks.forEach((task, idx) => {
+        const col = [0xff8c6b, 0x6bc4b0, 0xf5bc70, 0xdd88aa, 0x88ddbb, 0xccaa88, 0xaa99ff][idx % 7];
+        const angleRad = (task.angle * Math.PI) / 180;
+        const x = Math.cos(angleRad) * task.radius;
+        const z = Math.sin(angleRad) * task.radius;
+        const yOffset = 0.9;
+        
+        const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+        const mat = new THREE.MeshStandardMaterial({ color: col, emissive: 0x442200, emissiveIntensity: 0.32 });
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.position.set(x, yOffset, z);
+        mesh.castShadow = true;
+        mesh.userData = {
+            taskText: task.text,
+            answer: task.answer,
+            solved: false,
+            index: idx + 1,
+            originalPos: new THREE.Vector3(x, 0, z),
+            displayAnswer: task.displayAnswer,
+            wallColor: houseColorsList[idx],
+            roofColor: roofColorsList[idx % roofColorsList.length],
+            houseNumber: idx + 1
+        };
+        scene.add(mesh);
+        objectsList.push(mesh);
+        const arrow = addArrowAbove(mesh, idx + 1);
+        mesh.userData.arrow = arrow;
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(1.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa77, transparent: true, opacity: 0.2 }));
+        glow.position.set(x, yOffset, z);
+        scene.add(glow);
+        mesh.userData.glow = glow;
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0xbbaa88, roughness: 0.7 });
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.12, 8), baseMat);
+        base.position.set(x, 0.04, z);
+        base.receiveShadow = true;
+        scene.add(base);
+        mesh.userData.base = base;
+    });
+    
+    // Raycaster для выбора фигуры
+    const raycaster = new THREE.Raycaster();
+    const mouseVec = new THREE.Vector2();
+    window.addEventListener('click', (event) => {
+        mouseVec.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+        mouseVec.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+        raycaster.setFromCamera(mouseVec, camera);
+        const intersects = raycaster.intersectObjects(objectsList.filter(obj => obj.isMesh && obj.userData && obj.userData.taskText !== undefined));
+        if (intersects.length > 0) {
+            const hit = intersects[0].object;
+            if (!hit.userData.solved) {
+                currentFigure = hit;
+                document.getElementById('taskText').innerHTML = `🔺 ЗАДАНИЕ ${hit.userData.index}<br>${hit.userData.taskText}`;
+                document.getElementById('status').innerHTML = "💡 Введи ответ и нажми «ПОСТРОИТЬ ДОМ»!";
+                document.getElementById('status').style.color = "#ffdd99";
+            } else {
+                document.getElementById('taskText').innerHTML = "🏡 Этот домик уже построен! Нажми на другую фигуру.";
+                document.getElementById('status').innerHTML = "✨ Задание выполнено!";
+            }
+        }
+    });
+    
+    // Проверка ответа
+    window.checkAnswer = function() {
+        if (!currentFigure) {
+            document.getElementById('status').innerHTML = "🌸 Нажми на фигуру со стрелкой, чтобы начать!";
+            document.getElementById('status').style.color = "#ffccaa";
+            return;
+        }
+        if (currentFigure.userData.solved) {
+            document.getElementById('status').innerHTML = "🏠 Здесь уже стоит дом! Ищи другую фигуру.";
+            document.getElementById('status').style.color = "#ffaa66";
+            return;
+        }
+        const inputVal = parseFloat(document.getElementById('answer').value);
+        if (isNaN(inputVal)) {
+            document.getElementById('status').innerHTML = "❌ Введи число!";
+            document.getElementById('status').style.color = "#ff8888";
+            return;
+        }
+        const correct = currentFigure.userData.answer;
+        const tolerance = (correct === 0) ? 0.01 : Math.abs(correct) * 0.02;
+        const isCorrect = Math.abs(inputVal - correct) <= tolerance;
+        
+        if (isCorrect) {
+            const idx = objectsList.findIndex(obj => obj === currentFigure);
+            if (idx !== -1) {
+                if (currentFigure.userData.arrow) scene.remove(currentFigure.userData.arrow);
+                if (currentFigure.userData.glow) scene.remove(currentFigure.userData.glow);
+                if (currentFigure.userData.base) scene.remove(currentFigure.userData.base);
+                scene.remove(currentFigure);
+                const answerDisplay = currentFigure.userData.displayAnswer;
+                const housePos = currentFigure.userData.originalPos;
+                const wallColor = currentFigure.userData.wallColor;
+                const roofColor = currentFigure.userData.roofColor;
+                const houseNum = currentFigure.userData.houseNumber;
+                const house = buildHouseWithColor(housePos, answerDisplay, wallColor, roofColor, houseNum);
+                objectsList[idx] = house;
+                currentFigure.userData.solved = true;
+                solvedCount++;
+                currentScore += 10;
+                updateUI();
+                
+                const colorNames = ["красный", "оранжевый", "желтый", "зеленый", "голубой", "синий", "фиолетовый"];
+                document.getElementById('status').innerHTML = `🎉✅ ВЕРНО! Построен ${colorNames[houseNum-1]} дом с ответом ${answerDisplay}! +10 очков`;
+                document.getElementById('status').style.color = "#c3ffa2";
+                document.getElementById('answer').value = '';
+                currentFigure = null;
+            }
+        } else {
+            document.getElementById('status').innerHTML = `❌ Неверно! Попробуй ещё раз.`;
+            document.getElementById('status').style.color = "#ffb485";
+        }
+    };
+    
+    // Анимация
+    let lastTime = performance.now();
+    function animate() {
+        const now = performance.now();
+        let delta = Math.min(0.033, (now - lastTime) / 1000);
+        lastTime = now;
+        updateMovement(delta);
+        
+        sparkles.forEach((sp, i) => {
+            const data = sp.userData;
+            if (data) {
+                data.angle += 0.02 * data.speed;
+                const x = Math.cos(data.angle) * data.radius;
+                const z = Math.sin(data.angle) * data.radius;
+                sp.position.x = x;
+                sp.position.z = z;
+                sp.position.y = data.yOffset + Math.sin(Date.now() * 0.003 + i) * 0.05;
+            }
+        });
+        
+        controls.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+    }
+    animate();
+</script>
+</body>
+</html>
